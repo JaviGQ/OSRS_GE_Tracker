@@ -10,20 +10,14 @@ st.set_page_config(page_title="Dashboard",
                    layout="wide",
                    page_icon=":bar_chart:")
 
-st.title("OSRS Grand Exchange Monitor")
-st.subheader("Visualization Tool for OSRS's Grand Exchange Economy")
+st.title("Old School RuneScape Grand Exchange Monitor")
+st.subheader("Visualization Tool for Items in the Grand Exchange Economy")
 
 def api_url(letter_, page_):        #Used to grab the initial API that returns the item's core info, including image and in-game ID
     return f"https://secure.runescape.com/m=itemdb_oldschool/api/catalogue/items.json?category=1&alpha={letter_}&page={page_}"      #API structure provided in the documentation
 
 def id_url(id_):                    #Uses the ID from the above function to then pull from a different API that has the economic data
     return f"https://services.runescape.com/m=itemdb_oldschool/api/graph/{id_}.json"
-
-linePlot, maps, tables = st.tabs([
-    "Line Chart",
-    "Maps",
-    "Tables"
-])
 
 osrs_item = ""      #Initial declaration of item name, ID variables, and valid flag
 id_ = 0
@@ -39,25 +33,33 @@ if select_random:
     osrs_url = api_url(random_letter, page_=1)
     response = requests.get(osrs_url).json()
     osrs_item = response["items"][0]["name"]
-    st.session_state.osrs_item = osrs_item
+    st.session_state.osrs_item = osrs_item                          #Sets the session state's item to the random item
+    st.session_state.user_input = ""                                #Ensures any user input is deleted to ensure no issues with data visualization
     st.rerun()
 
-user_input = st.sidebar.text_input("Enter item name")           #User can input an item name through the sidebar
+linePlot, maps, scatter, tables = st.tabs([
+    "Line Chart",
+    "3D Map",
+    "Scatter Plot",
+    "Tables"
+])
 
-if user_input and not st.session_state.osrs_item:
+user_input = st.sidebar.text_input("Enter item name", key="user_input")           #User can input an item name through the sidebar
+
+if user_input:
     osrs_item = user_input
     osrs_url = api_url(osrs_item.lower(), page_=1)       #API only recognizes lower case input so all user input is cast to lowercase
     response = requests.get(osrs_url).json()
     #id_ = response["items"][0]["id"]
     st.session_state.osrs_item = ""
 
-elif st.session_state.osrs_item:
+elif st.session_state.osrs_item:                         #If item session state exists, then the random button was selected
     osrs_item = st.session_state.osrs_item
     osrs_url = api_url(osrs_item.lower(), page_=1)
     response = requests.get(osrs_url).json()
 
 else:
-    st.sidebar.info(
+    st.sidebar.info(                                    #Default info bubble
          "Search for any item that can be found in the Grand Exchange. For example, search \"rune scimitar\"."
 
     )  # Not everyone has played OSRS, so this provides an example so users can at least see what the application can do
@@ -66,7 +68,7 @@ else:
     response = requests.get(osrs_url).json()
 
 
-if response["items"]:             #If the input triggers a hit in the API request, produces the dataframe
+if response["items"]:                                          #If the input triggers a hit in the API request, produces the dataframe
     item_name = response["items"][0]["name"]
 
     item_df = pd.DataFrame(response["items"])
@@ -96,7 +98,7 @@ if response["items"]:             #If the input triggers a hit in the API reques
 
     st.sidebar.success(f"Now displaying economic data for \"{item_name}\"")
 
-    large_icon = next(item for item in response["items"] if item["name"] == item_name)["icon_large"]
+    large_icon = next(item for item in response["items"] if item["name"] == item_name)["icon_large"]        #For the chosen item, pulls the image from the API and shows it to the user
     st.sidebar.image(large_icon, use_container_width=True, caption=item_name)
 
     id_url = id_url(id_)
@@ -111,42 +113,93 @@ else:                           #If the item search returns an empty list catche
 if valid:
     with linePlot:
         st.subheader("Line Chart for Price Change Over Previous 180 days")
+        st.subheader(f"Current price for {item_name}: {df['daily'].iloc[-1]:,} gold")
 
         col1, col2 = st.columns([2, 5])
-        with col1:
-            color = st.color_picker("Choose a color", "#FFD700")
+        with col1:              #User can choose which data for each item to view in the line chart
             parameter = st.radio("Choose a parameter",
-                                     options=["Daily", "Average"])
+                                 options=["Daily", "Average", "Both"])
+            if parameter != "Both":             #Colors for each or both of the parameters allowed and updates the line graph
+                color = st.color_picker(f"Choose a color for {parameter}", "#FFD700")
+            else:
+                color = st.color_picker(f"Choose a color for Daily", "#FFD700")
+                color2 = st.color_picker("Choose a color for Average", "#F8F8F8")
 
         with col2:
-            fig2 = px.line(
-                df,
-                x=df.index,
-                y=parameter.lower(),
-                title=f"{parameter} Price of {item_name}"
-            )
-            fig2.update_traces(line_color=color)
-            fig2.update_layout(
-                xaxis=dict(
-                    title=dict(
-                        text="Days"
-                    )
-                ),
-            yaxis = dict(
-                title=dict(
-                    text="Price"
-                    )
+            if parameter == "Both":                 #Graph with two lines drawn when user selects both in the radio
+                parameter = ["daily", "average"]
+                fig2 = px.line(
+                    df,
+                    x=df.index,
+                    y=parameter,
+                    title=f"Price of {item_name}"
                 )
-            )
-            st.plotly_chart(fig2)
+                fig2.update_traces(line_color=color, selector=dict(name="daily"))           #Update traces required for each line separately
+                fig2.update_traces(line_color=color2, selector=dict(name="average"))
+                fig2.update_layout(
+                    xaxis=dict(title=dict(text="Days")),
+                    yaxis=dict(title=dict(text="Price"))
+                )
+                st.plotly_chart(fig2)
 
-    with tables:
+            else:                                   #A single line graph is drawn when one of the individual parameters is chosen
+                fig2 = px.line(
+                    df,
+                    x=df.index,
+                    y=parameter.lower(),
+                    title=f"{parameter} Price of {item_name}"
+                )
+                fig2.update_traces(line_color=color)
+                fig2.update_layout(
+                    xaxis=dict(title=dict(text="Days")),
+                    yaxis=dict(title=dict(text="Price"))
+                )
+                st.plotly_chart(fig2)
+
+    with maps:
+        st.subheader(f"3D Mapping of Economic Data for {item_name}")
+        col1, col2 = st.columns([0.1, .9], gap="small")
+        with col1:
+            reverse_3d = st.checkbox("Reverse 3D Map")
+
+        with col2:
+            item_3d = px.scatter_3d(
+                df,
+                x="daily",
+                y="average",
+                z=df.index,
+                color=df.index
+            )
+            item_3d.update_scenes(
+                xaxis=dict(title=dict(text="Daily")),
+                yaxis=dict(title=dict(text="Average")),
+                zaxis=dict(title=dict(text="Days"))
+            )
+
+            if reverse_3d:
+                item_3d.update_scenes(zaxis_autorange="reversed")
+
+            st.plotly_chart(item_3d)
+
+    with scatter:
+        st.subheader(f"Scatter Chart for {item_name} Price")
+        item_scatter = px.scatter(
+            df,
+            x="daily",
+            y=df.index,
+            title=f"Daily Scatter Chart for {item_name}",
+            color="average"
+        )
+
+        st.plotly_chart(item_scatter    )
+
+    with tables:                                              #Raw data of the tables shown
         st.subheader("Raw Data")
         st.dataframe(
             df,
             column_order=("daily","average"),
             column_config={
-                "daily": st.column_config.NumberColumn("Daily"),
+                "daily": st.column_config.NumberColumn("Daily"),        #Minor changes to the formatting for capitalization
                 "average": st.column_config.NumberColumn("Average"),
             }
         )
