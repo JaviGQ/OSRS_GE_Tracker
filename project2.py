@@ -116,14 +116,16 @@ if valid:
         st.subheader(f"Current price for {item_name}: {df['daily'].iloc[-1]:,} gold")
 
         col1, col2 = st.columns([2, 5])
-        with col1:              #User can choose which data for each item to view in the line chart
+
+        with col1:
             parameter = st.radio("Choose a parameter",
-                                 options=["Daily", "Average", "Both"])
-            if parameter != "Both":             #Colors for each or both of the parameters allowed and updates the line graph
-                color = st.color_picker(f"Choose a color for {parameter}", "#FFD700")
+                                 options=["Daily", "Average", "Both"],
+                                 key=f"parameter_{item_name}")  #Adds the item name to the state in order to refresh the radio when a new item is chosen
+            if parameter != "Both":                             #Allows the user to choose the color for one or both of the lines, based on their chosen option
+                color = st.color_picker(f"Choose a color for {parameter}", "#1D5CBD", key=f"color_{item_name}")
             else:
-                color = st.color_picker(f"Choose a color for Daily", "#FFD700")
-                color2 = st.color_picker("Choose a color for Average", "#F8F8F8")
+                color = st.color_picker(f"Choose a color for Daily", "#1D5CBD", key=f"color_daily_{item_name}")
+                color2 = st.color_picker("Choose a color for Average", "#F8F8F8", key=f"color_avg_{item_name}")
 
         with col2:
             if parameter == "Both":                 #Graph with two lines drawn when user selects both in the radio
@@ -160,7 +162,7 @@ if valid:
         st.subheader(f"3D Mapping of Economic Data for {item_name}")
         col1, col2 = st.columns([0.1, .9], gap="small")
         with col1:
-            reverse_3d = st.checkbox("Reverse 3D Map")
+            reverse_3d = st.checkbox("Reverse 3D Map", key=f"reverse_{item_name}")      #As with the line graph radio, adding the item name to the key ensures it resets for each new item
 
         with col2:
             item_3d = px.scatter_3d(
